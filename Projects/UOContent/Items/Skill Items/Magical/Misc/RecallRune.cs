@@ -1,7 +1,10 @@
 using ModernUO.Serialization;
+using Server.Mobiles;
 using Server.Multis;
+using Server.ContextMenus;
 using Server.Prompts;
 using Server.Regions;
+using System.Collections.Generic;
 
 namespace Server.Items;
 
@@ -22,6 +25,16 @@ public partial class RecallRune : Item
     public RecallRune() : base(0x1F14)
     {
         Weight = 1.0;
+        CalculateHue();
+    }
+
+    public RecallRune(string description, Point3D target, BaseHouse house, Map targetMap) : base(0x1F14)
+    {
+        _description = description;
+        _target = target;
+        House = house;
+        TargetMap = targetMap;
+        Marked = true;
         CalculateHue();
     }
 
@@ -179,6 +192,69 @@ public partial class RecallRune : Item
 
         CalculateHue();
         InvalidateProperties();
+    }
+
+    public void CreateCopy(PlayerMobile from)
+    {
+        if(from.Skills[SkillName.Magery].Value < 60.0 || from.Skills[SkillName.Inscribe].Value < 60.0)
+        {
+            from.SendMessage("You don't have the required training to create that.");
+            return;
+        }
+
+        var blankRecallRune = from.Backpack.FindItemByType<RecallRune>(true, rune => rune.Marked == false);
+
+        if(blankRecallRune == null)
+        {
+            from.SendMessage("You don't have a blank rune to copy onto.");
+            return;
+        }
+
+        var copy = new RecallRune(
+            _description,
+            _target,
+            House,
+            TargetMap
+        );
+
+        blankRecallRune.Consume();
+
+        from.AddToBackpack(copy);
+    }
+    
+    public override void GetContextMenuEntries(Mobile from, List<ContextMenuEntry> list)
+    {
+        if(!this.Marked) return;
+        base.GetContextMenuEntries(from, list);
+
+        if(from is PlayerMobile player) 
+        { 
+            list.Add(new Copy(player, this));
+        }
+    }
+
+    public class Copy : ContextMenuEntry
+    {
+        private readonly PlayerMobile m_From;
+        private readonly RecallRune m_RecallRune;
+
+        public Copy(PlayerMobile from, RecallRune recallRune)
+            : base(3005044, 5)
+        {
+            m_From = from;
+            m_RecallRune = recallRune;
+        }
+
+        public override void OnClick()
+        {
+            if(!m_RecallRune.Marked)
+            {
+                m_From.SendMessage("You can't copy a blank recall rune.");
+                return;
+            }
+
+            m_RecallRune.CreateCopy(m_From);
+        }
     }
 
     public override void GetProperties(IPropertyList list)
